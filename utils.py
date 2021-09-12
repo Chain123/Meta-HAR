@@ -47,6 +47,13 @@ def dataloader_gen(filename, batch_size, transform=None, train=True, target="log
     return dataloader
 
 
+def dataloader_gen2(filename, batch_size, transform=None, train=True, target="logits"):
+    dataset = data_loader.heter_data2(filename, target=target)
+    dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=train, num_workers=2,
+                                             drop_last=True)
+    return dataloader
+
+
 def load_pickle(filename):
     f = open(filename, "rb")
     return pickle.load(f, encoding="latin")
