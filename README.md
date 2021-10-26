@@ -39,8 +39,7 @@ Details in ./data_process/readme.md
     python Central.py   # for central model. 
     python meta-har.py  # for meta-har
 ```
-Note: Configure your own data and output dirs.  
-
+Note: Configure your own data and output dirs
 ## Others
 To run the Reptile method:
 1. Change the ``norm_embed`` to ``norm_cce`` in the Meta-HAR and remove fine-tune. 
