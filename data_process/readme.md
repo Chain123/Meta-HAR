@@ -11,6 +11,7 @@ C. Format of the collected dataset: (available at https://drive.google.com/file/
 
 Details on collected dataset:
 1. APP used to collect the data. 
+
 ![img.png](img.png)
 
 Label and action in the txt files: \
