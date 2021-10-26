@@ -11,12 +11,6 @@
   </p>
 
 <!-- GETTING STARTED -->
-## Getting Started
-
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
-
-
 ### Dataset
 
 Details in ./data_process/readme.md 
@@ -24,7 +18,7 @@ Details in ./data_process/readme.md
 1. For collected dataset: 
     ```sh
     cd data_process
-    python feature_extraction.py --in_dir 'dir stores the original txt data' --out_dir 'dir used to store pickle data'   
+    python feature_extraction.py --in_dir 'dir stores the original txt data' --out_dir 'dir whic is used to store pickle data'   
     ```
     The ``feature_extraction.py`` generates pickle files and the ``trans_dict_collect.pickle`` file. 
 
@@ -41,9 +35,9 @@ Details in ./data_process/readme.md
 ```
 Note: Configure your own data and output dirs
 ## Others
-To run the Reptile method:
-1. Change the ``norm_embed`` to ``norm_cce`` in the Meta-HAR and remove fine-tune. 
-2. User "target" not "target_t" in fine-tune for Meta-HAR-CE
+To run other baselines:
+1. Reptile: Change the ``norm_embed`` to ``norm_cce`` in the Meta-HAR and remove fine-tune. 
+2. Meta-HAR-CE: Use "target" instead of "target_t" in fine-tune.
 
 <!-- CONTACT -->
 ## Contact
