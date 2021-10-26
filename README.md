@@ -18,7 +18,7 @@ Details in ./data_process/readme.md
 1. For collected dataset: 
     ```sh
     cd data_process
-    python feature_extraction.py --in_dir 'dir stores the original txt data' --out_dir 'dir used to store pickle data'   
+    python feature_extraction.py --in_dir 'dir stores the original txt data' --out_dir 'dir whic is used to store pickle data'   
     ```
     The ``feature_extraction.py`` generates pickle files and the ``trans_dict_collect.pickle`` file. 
 
