@@ -39,6 +39,9 @@ To run other baselines:
 1. Reptile: Change the ``norm_embed`` to ``norm_cce`` in the Meta-HAR and remove fine-tune. 
 2. Meta-HAR-CE: Use "target" instead of "target_t" in fine-tune.
 
+## TODO
+Processing code for the HHAR and the USC-HAD datasets. 
+
 <!-- CONTACT -->
 ## Contact
 
