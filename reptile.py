@@ -1,19 +1,18 @@
-import torch
-from torch import nn
-import torch.optim as optim
-from typing import Any, List
-from torch.optim.lr_scheduler import StepLR
-import utils
+import _pickle as pickle
+import argparse
 import copy
 import os
-import argparse
+
 import numpy as np
+import torch
+import torch.optim as optim
+from torch import nn
+from torch.optim.lr_scheduler import StepLR
+
 import har_model
-import sys
-from cluster_torch import lloyd
-import _pickle as pickle
+import utils
+
 # from torch.nn import PairwiseDistance
-import time
 
 
 cross_entropy = nn.CrossEntropyLoss()

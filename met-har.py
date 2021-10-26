@@ -1,41 +1,21 @@
-import torch
-from torch import nn
-import torch.optim as optim
-from typing import Any, List
-from torch.optim.lr_scheduler import StepLR
-import utils
+import argparse
 import copy
 import os
-import argparse
-import numpy as np
-import har_model
 import random
-import sys
-from cluster_torch import lloyd
-import time
+from typing import Any
 
+import numpy as np
+import torch
+import torch.optim as optim
+from torch import nn
+from torch.optim.lr_scheduler import StepLR
+
+import har_model
+import utils
 
 cross_entropy = nn.CrossEntropyLoss()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 cosine_similarity = nn.CosineSimilarity()
-
-parser = argparse.ArgumentParser(description='Training embedding net on sensor data')
-parser.add_argument('--dataset', help='Dataset dir')
-parser.add_argument('--result_dir', help='result dir')
-parser.add_argument('--local_e', type=int, help='federated local epoches')
-parser.add_argument('--sigma', type=float, help='sigma')
-parser.add_argument('--lr', default=0.001, type=float, help='learning rate')
-parser.add_argument('--adapt_num', default=5, type=int, help='learning rate')
-args = parser.parse_args()
-
-all_trans_dict = utils.load_pickle("/data/ceph/seqrec/fl_data/www21/source/trans_dict_all.pickle")
-# this pickle file defines the act embedding rule. e.g. bike is 0, walk is 1. this is interchangeable. 
-
-# fed_users = []  # on public dataset. 
-# for i in range(9):
-#     fed_users.append("heter/user_%d" % i)
-# for i in range(1, 15):
-#     fed_users.append("usc/Subject%d" % i)
 
 
 class MyEnsemble(nn.Module):
@@ -52,7 +32,7 @@ class MyEnsemble(nn.Module):
 
 class reptile_meta(object):
 
-    def __init__(self, graph, lr, device, loss_fun, embed_len, number_class, class_map=None, beta=0.5):
+    def __init__(self, graph, lr, device_i, loss_fun, embed_len, number_class, class_map=None, beta=0.5):
         """graph can be norm_embed"""
         super(reptile_meta, self).__init__()
         self.lr = lr
@@ -61,19 +41,18 @@ class reptile_meta(object):
         self.number_class = number_class
         # initialize embed model and last layer
         self.model = graph(bidirectional=False)  
-        self.model = self.model.to(device)        
+        self.model = self.model.to(device_i)
         self.last_layer = har_model.last_layer(embed_len, number_class)
-        self.last_layer = self.last_layer.to(device)
+        self.last_layer = self.last_layer.to(device_i)
         self.merge_model = MyEnsemble(self.model, self.last_layer)
-        self.training_op = {"last_optimizer": optim.Adam(self.last_layer.parameters(), lr=self.lr, weight_decay=1e-4)}
-        self.training_op["embed_optimizer"] = optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-4)
-        self.training_op["loss_fun"] = loss_fun
-        self.training_op["loss_fun_last"] = cross_entropy  
+        self.training_op = {"last_optimizer": optim.Adam(self.last_layer.parameters(), lr=self.lr, weight_decay=1e-4),
+                            "embed_optimizer": optim.Adam(self.model.parameters(), lr=self.lr, weight_decay=1e-4),
+                            "loss_fun": loss_fun, "loss_fun_last": cross_entropy}
         self.training_res = {"train_acc": [], "test_acc": []}
 
     def label_transfer(self, target): 
-        int_lable = target.max(1)[1].numpy()     # [B, 1]
-        result = self.class_map[int_lable]
+        int_label = target.max(1)[1].numpy()     # [B, 1]
+        result = self.class_map[int_label]
         return torch.from_numpy(result)
 
     def save_model(self, filename):
@@ -421,14 +400,12 @@ def update_server_weights_weighted(w_list, w, sigma=0.2):  # TO BE DONE
     return w_avg
 
 
-def main(rounds, out_dir, lr=0.001, local_e=1, leave_out=[0], sigma=0.1, tmp=0):
+def main(rounds, data_dir, out_dir, lr=0.001, local_e=1, leave_out=None, sigma=0.1, all_trans_dict=None):
     """
     :param rounds: global rounds for federated learning: type: float
-    :param in_dir: input data dir: type: string
     :param out_dir: output result dir: type: string
     :param lr: initial learning rate: type float
-    :param local_e: local update epoches for federated learning: type: int
-    :param adapt_num: number of batch go through when used for adaptation: type: int
+    :param local_e: local update epochs for federated learning: type: int
     :param leave_out: leave out user index: 0-8 type: int
     :param sigma: w_new = w + sigma* (avg_updated_w - w): sigma: float 0-1
     :return: None
@@ -436,34 +413,30 @@ def main(rounds, out_dir, lr=0.001, local_e=1, leave_out=[0], sigma=0.1, tmp=0):
         1. model acc on leave out user: before and after adapt
         2. model acc on fed users: before and after adapt
     """
-    collect_dir = "/data/ceph/seqrec/fl_data/www21/data/feature_fft/all_data/collect_new"
-    my_dir = "/data/ceph/seqrec/fl_data/www21/data/feature_fft/all_data/mine_new"
-    all_act_num = utils.load_pickle("/data/ceph/seqrec/fl_data/www21/source/num_act_user_all.pickle")
+    if leave_out is None:
+        leave_out = [0]
+
+    # all_act_num = utils.load_pickle("/data/ceph/seqrec/fl_data/www21/source/num_act_user_all.pickle")
+    all_act_num = {}
+    for user in all_trans_dict.keys():
+        all_act_num[user] = np.sum(all_trans_dict[user] != -1)  # number of local activities of `user'
     # the number of local act for each users.
 
-    # two parts of collected sources. these two files records the truth user ids for these two parts.
-    # in the open source dataset, this is remove, (user-# is used to replace the truth IDs of users) 
-    collect_users = utils.load_pickle("/data/ceph/seqrec/fl_data/www21/source/final_selected_user_collect_all.pickle")     
-    my_users = utils.load_pickle("/data/ceph/seqrec/fl_data/www21/source/final_selected_user_mine_all.pickle")
-
-    collected_train = [os.path.join(collect_dir, file.split("_")[0] + "_19_act_train.pickle") for file in collect_users]
-    collected_test = [os.path.join(collect_dir, file.split("_")[0] + "_19_act_test_b.pickle") for file in collect_users]
-    my_train = [os.path.join(my_dir, file.split("_")[0] + "_19_act_train.pickle") for file in my_users]
-    my_test = [os.path.join(my_dir, file.split("_")[0] + "_19_act_test_b.pickle") for file in my_users]
-    all_train = collected_train + my_train
-    all_test = collected_test + my_test
+    all_train = [os.path.join(data_dir, file) for file in os.listdir(data_dir) if "train" in file]
+    all_test = [os.path.join(data_dir, file) for file in os.listdir(data_dir) if 'test' in file]
     random.Random(0).shuffle(all_train)
     random.Random(0).shuffle(all_test)
 
+    # 5 leave out for meta testing
     train_users_train = all_train[0:-5]
     train_user_test = all_test[0:-5]
     test_users_train = all_train[-5:]
     test_user_test = all_test[-5:]
 
     # Meta-train users
-    client_models = []  # type: Any
+    client_models = []
     for ind in range(len(train_users_train)):
-        file_name = train_users_train[ind].split(os.sep)[-1].split("_")[0] + "_act"
+        file_name = train_users_train[ind].split(os.sep)[-1].split("_")[0]
         client_models.append(
             reptile_meta(har_model.norm_embed, lr, device, utils.pairwiseloss(), 100, all_act_num[file_name]))
         client_train_file = [train_users_train[ind]]
@@ -474,9 +447,10 @@ def main(rounds, out_dir, lr=0.001, local_e=1, leave_out=[0], sigma=0.1, tmp=0):
         client_models[-1].build_data_loader()
 
     # Meta-test users
+    # Note: By replacing `norm_embed' with the `norm_cce' and removing the local fine-tune we get the reptile method.
     leave_out_modules = []
     for ind in range(5):
-        file_name = test_users_train[ind].split(os.sep)[-1].split("_")[0] + "_act"
+        file_name = test_users_train[ind].split(os.sep)[-1].split("_")[0]
         leave_out_modules.append(
             reptile_meta(har_model.norm_embed, lr, device, utils.pairwiseloss(), 100, all_act_num[file_name]))
         leave_train = [test_users_train[ind]]
@@ -486,12 +460,13 @@ def main(rounds, out_dir, lr=0.001, local_e=1, leave_out=[0], sigma=0.1, tmp=0):
         leave_out_modules[-1].build_data_loader()
 
     # server model
-    server_model = reptile_meta(har_model.norm_embed, lr, device, utils.pairwiseloss(), 100, 8)  # TODO 7 is OK
+    server_model = reptile_meta(har_model.norm_embed, lr, device, utils.pairwiseloss(), 100, 7)
+    # there are totally 7 activities in global act set.
     # server_model result dir
-    fed_test_result = {"before": []}
+    fed_test_result = {"before": []}    # result before fine-tune
     leave_test_result = {"before": []}
     init_after = 0
-    for val in [1, 1, 1]:
+    for val in [1, 1, 1]:    # result after x steps of local fine-tune
         fed_test_result["tune_%d" % (init_after + val)] = []
         leave_test_result["tune_%d" % (init_after + val)] = []
         init_after += val
@@ -557,11 +532,29 @@ def main(rounds, out_dir, lr=0.001, local_e=1, leave_out=[0], sigma=0.1, tmp=0):
     leave_str = ""
     for val in leave_out:
         leave_str += str(val)
-    fed_test_file = os.path.join(out_dir, "metahar_train_b2.pickle")
-    leave_test_file = os.path.join(out_dir, "metahar_test_b2.pcikle")
+    fed_test_file = os.path.join(out_dir, "metahar_train_b2.pickle")   # meta-train users
+    leave_test_file = os.path.join(out_dir, "metahar_test_b2.pcikle")  # meta-test users
     utils.save_pickle(fed_test_result, fed_test_file)
     utils.save_pickle(leave_test_result, leave_test_file)
 
 
 if __name__ == '__main__':
-    main(100, "/data/ceph/seqrec/fl_data/www21/result_all", lr=utils.parameter["lr"], local_e=2, sigma=1.0)
+    parser = argparse.ArgumentParser(description='Meta-HAR')
+    parser.add_argument('--dataset', type=str, help='Dataset dir',
+                        default="F:\\www21\\final_version\\Meta-HAR\\Data\\collected_pickle")
+    parser.add_argument('--result_dir', type=str, help='result dir',
+                        default="F:\\www21\\final_version\\Meta-HAR\\results")
+    parser.add_argument('--local_e', type=int, default=2,
+                        help='number of local epochs in the federated training phase')
+    parser.add_argument('--sigma', type=float, default=1.0,
+                        help='sigma (refer to the paper)')
+    parser.add_argument('--lr', type=float, default=0.001,
+                        help='learning rate')
+    parser.add_argument('--adapt_num', type=int, default=5,
+                        help='number of adaptation steps (in the fine-tune phase)')
+    args = parser.parse_args()
+
+    all_trans_dict = utils.load_pickle("F:\\www21\\data\\trans_dict_collect.pickle")
+    main(100, args.dataset, args.result_dir, lr=args.lr, local_e=args.local_e, sigma=args.sigma,
+         all_trans_dict=all_trans_dict)
+    # total update rounds=100

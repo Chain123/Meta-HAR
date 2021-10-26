@@ -40,14 +40,21 @@ cross_entropy = nn.CrossEntropyLoss()
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-def dataloader_gen(filename, batch_size, transform=None, train=True, target="logits"):
+def dataloader_gen(filename, batch_size, train=True, target="logits"):
+    """
+        Args:
+            filename: a list of pickle files that stores the processed HAR data (after FFT)
+            batch_size: batch size
+            train: is for training?
+            target: encoder method for the label: "hot": one-hot encoding, else int number
+    """
     dataset = data_loader.heter_data(filename, target=target)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=train, num_workers=2,
                                              drop_last=True)
     return dataloader
 
 
-def dataloader_gen2(filename, batch_size, transform=None, train=True, target="logits"):
+def dataloader_gen2(filename, batch_size, train=True, target="logits"):
     dataset = data_loader.heter_data2(filename, target=target)
     dataloader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=train, num_workers=2,
                                              drop_last=True)
@@ -75,9 +82,9 @@ class pairwiseloss(torch.nn.Module):
         Phi = cosine_similarity(embed_split[0], embed_split[1]) * Expand
         soft_phi = softplus(Phi)
         if device == "cuda":
-            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.cuda.DoubleTensor)
+            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.cuda.FloatTensor)
         else:
-            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.DoubleTensor)
+            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.FloatTensor)
         # print(mask.type())
         # print(Phi.type())
         mask_phi = torch.mul(mask, Phi)
@@ -89,23 +96,24 @@ class pairwiseloss_global(torch.nn.Module):
     def __init__(self):
         super(pairwiseloss_global, self).__init__()
 
-    def forward(self, embed, target, chunck_size, global_center=None, beta=2.0, Expand=10):
+    def forward(self, embed, target, chunk_size, global_center=None, beta=2.0, Expand=10):
+        # Expand=10 equals to the temperature=0.1 in a commonly used temperature based formula.
         Expand = np.float64(Expand * 1.0)
-        embed_split = torch.split(embed, chunck_size, dim=0)
-        target_split = torch.split(target, chunck_size, dim=0)
+        embed_split = torch.split(embed, chunk_size, dim=0)
+        target_split = torch.split(target, chunk_size, dim=0)
         Phi = cosine_similarity(embed_split[0], embed_split[1]) * Expand
         soft_phi = softplus(Phi)
         if device == "cuda":
-            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.cuda.DoubleTensor)
+            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.cuda.FloatTensor)
         else:
-            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.DoubleTensor)
+            mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.FloatTensor)
         mask_phi = torch.mul(mask, Phi)
         pairwiseloss = torch.sub(soft_phi, mask_phi).mean()
         if global_center is not None:
             if device == "cuda":
-                sample_centers = torch.mm(target.type(torch.cuda.DoubleTensor), global_center)
+                sample_centers = torch.mm(target.type(torch.cuda.FloatTensor), global_center)
             else:
-                sample_centers = torch.mm(target.type(torch.DoubleTensor), global_center)
+                sample_centers = torch.mm(target.type(torch.FloatTensor), global_center)
             phi_1 = cosine_similarity(embed, sample_centers) * Expand
             global_sim_loss = torch.sub(softplus(phi_1), phi_1).mean()
             # print(pairwiseloss)
@@ -157,9 +165,9 @@ class crossentropy_pairwise(torch.nn.Module):
             Phi = cosine_similarity(embed_split[0], embed_split[1]) * Expand
             soft_phi = softplus(Phi)
             if device == "cuda":
-                mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.cuda.DoubleTensor)
+                mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.cuda.FloatTensor)
             else:
-                mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.DoubleTensor)
+                mask = torch.sum(torch.mul(target_split[0], target_split[1]), dim=1).type(torch.FloatTensor)
             mask_phi = torch.mul(mask, Phi)
             pairwiseloss = torch.sub(soft_phi, mask_phi).mean()
 
