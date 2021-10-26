@@ -36,9 +36,9 @@ Details in ./data_process/readme.md
 Note: Configure your own data and output dirs.  
 
 ## Others
-To run the Reptile method:
-1. Change the ``norm_embed`` to ``norm_cce`` in the Meta-HAR and remove fine-tune. 
-2. User "target" not "target_t" in fine-tune for Meta-HAR-CE
+To run other baselines:
+1. Reptile: Change the ``norm_embed`` to ``norm_cce`` in the Meta-HAR and remove fine-tune. 
+2. Meta-HAR-CE: Use "target" instead of "target_t" in fine-tune.
 
 <!-- CONTACT -->
 ## Contact
